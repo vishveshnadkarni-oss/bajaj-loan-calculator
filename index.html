@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Bajaj Loan Calculator (v7.1)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bajaj-blue:#004C97;
+    --bajaj-yellow:#FDB913;
+    --bg:#0d0d0d;
+    --card:#111214;
+    --muted:#bfc6cc;
+  }
+  body{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;margin:0;background:var(--bg);color:#fff;padding:18px;}
+  .wrap{max-width:900px;margin:0 auto;}
+  .card{background:var(--card);border-radius:12px;padding:18px;box-shadow:0 6px 20px rgba(0,0,0,0.6);margin-bottom:16px;}
+  h1{text-align:center;color:var(--bajaj-yellow);font-size:22px;margin-bottom:8px;}
+  p.lead{text-align:center;color:var(--muted);margin-bottom:20px;}
+  label.f{display:block;font-weight:600;color:var(--bajaj-yellow);margin-top:12px;font-size:14px;}
+  input[type=number]{width:100%;padding:12px;margin-top:6px;border-radius:8px;border:1px solid #222;background:#0f1011;color:#fff;font-size:15px;}
+  button.btn{width:100%;padding:14px;border-radius:8px;border:none;background:var(--bajaj-blue);color:#fff;font-weight:600;font-size:16px;cursor:pointer;margin-top:18px;}
+  button.btn:hover{background:var(--bajaj-yellow);color:#000;}
+  .result-cards{display:flex;flex-direction:column;gap:12px;margin-top:18px;}
+  .result-card{background:#0b0b0b;border-radius:10px;padding:14px;border:1px solid #161616;}
+  .result-card h3{margin:0 0 8px 0;color:var(--bajaj-yellow);font-size:15px;}
+  .result-item{display:flex;justify-content:space-between;padding:6px 0;border-top:1px dashed #171717;font-size:14px;}
+  .result-item:first-of-type{border-top:0;padding-top:0;}
+  .muted{color:var(--muted);font-size:13px;}
+  .pf-ins-card{background:#0b0b0b;border-radius:10px;padding:14px;border:1px solid #161616;margin-bottom:10px;}
+  .pf-ins-card .label{color:var(--bajaj-yellow);font-weight:600;}
+  .total-highlight{color:var(--bajaj-yellow);font-weight:700;}
+  #totalCharges{color:#fff;font-weight:600;}
+  .info-icon{display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;border-radius:50%;background:var(--bajaj-blue);color:#fff;font-weight:700;cursor:pointer;margin-left:6px;font-size:12px;}
+  .tooltip{position:fixed;z-index:9999;background:#fff;color:#111;padding:10px 12px;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,0.4);max-width:260px;font-size:13px;display:none;}
+  .note{font-size:13px;color:var(--muted);margin-top:18px;text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Bajaj Loan Calculator</h1>
+    <p class="lead">Compare Term Loan, EMI Holiday, and Principal Moratorium</p>
+
+    <label class="f">Loan Amount (₹)</label>
+    <input id="loanAmount" type="number" value="1000000"/>
+
+    <label class="f">Interest Rate (% p.a.)</label>
+    <input id="interestRate" type="number" step="0.01" value="10"/>
+
+    <label class="f">Tenure (months)</label>
+    <input id="tenure" type="number" value="24"/>
+
+    <label class="f">EMI Holiday (months)</label>
+    <input id="emiHoliday" type="number" value="6"/>
+
+    <label class="f">Principal Morat (months)</label>
+    <input id="principalMorat" type="number" value="12"/>
+
+    <button id="calcBtn" class="btn">Calculate</button>
+
+    <div id="pfCard" class="pf-ins-card">
+      <div class="label">Processing Fee (including GST)</div>
+      <div id="pfAmount">₹0.00</div>
+    </div>
+    <div id="insCard" class="pf-ins-card">
+      <div class="label">Insurance</div>
+      <div id="insAmount">₹0.00</div>
+    </div>
+    <div id="stampCard" class="pf-ins-card">
+      <div class="label">Stamp Duty</div>
+      <input id="stampInput" type="number" placeholder="Enter Stamp Duty (₹)" style="width:100%;padding:10px;border-radius:8px;border:1px solid #333;background:#0f1011;color:#fff;">
+    </div>
+    <div id="totalCard" class="pf-ins-card">
+      <div class="label total-highlight">Total Charges</div>
+      <div id="totalCharges">₹0.00</div>
+    </div>
+
+    <div id="cards" class="result-cards"></div>
+    <p class="note">Note: Processing Fee, Insurance & Stamp Duty are to be paid separately and are not included in the above calculations.</p>
+  </div>
+</div>
+
+<div id="tooltip" class="tooltip" role="dialog" aria-hidden="true">If your equipment generates more than the Per Month Extra amount, this scheme is financially beneficial.</div>
+
+<script>
+function toNum(v){return isFinite(v)?Number(v):0;}
+function emiFormula(principal, rate, months){
+  if(months<=0)return 0;
+  if(rate===0)return principal/months;
+  const f=Math.pow(1+rate,months);
+  return principal*rate*f/(f-1);
+}
+function formatINRnum(x){return Number(x).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function formatINR(x){if(x==='-'||x===undefined||x===null||isNaN(x))return '-';return '₹'+formatINRnum(x);}
+
+function calculateAll(){
+  const P=toNum(document.getElementById('loanAmount').value);
+  const annualRate=toNum(document.getElementById('interestRate').value);
+  const n=Math.max(1,parseInt(document.getElementById('tenure').value||0));
+  const emiHoliday=Math.max(0,parseInt(document.getElementById('emiHoliday').value||0));
+  const principalMorat=Math.max(0,parseInt(document.getElementById('principalMorat').value||0));
+  const r=annualRate/12/100;
+  const pf=P*0.01*1.18;
+  const ins=P*0.004*1.18;
+  const stamp=toNum(document.getElementById('stampInput').value||0);
+  const totalCharges=pf+ins+stamp;
+  const emiTerm=emiFormula(P,r,n);
+  const totalTerm=emiTerm*n;
+  const interestTerm=totalTerm-P;
+  const accrued=P*(Math.pow(1+r,emiHoliday)-1);
+  const newP=P+accrued;
+  const remH=Math.max(1,n-emiHoliday);
+  const emiHolidayAmt=emiFormula(newP,r,remH);
+  const totalHoliday=emiHolidayAmt*remH;
+  const interestHoliday=totalHoliday-P;
+  const emiDuringHoliday=0;
+  const emiDuringMorat=P*r;
+  const remM=Math.max(1,n-principalMorat);
+  const emiAfterMorat=emiFormula(P,r,remM);
+  const totalMorat=(emiDuringMorat*principalMorat)+(emiAfterMorat*remM);
+  const interestMoratTotal=totalMorat-P;
+  const extraMorat=totalMorat-totalTerm;
+  const perMonthMorat=principalMorat?(extraMorat/principalMorat):null;
+
+  const term={scheme:'Term Loan',emi:emiTerm,total:totalTerm,interest:interestTerm};
+  const holiday={scheme:'EMI Holiday',during:emiDuringHoliday,emi:emiHolidayAmt,total:totalHoliday,interest:interestHoliday};
+  const morat={scheme:'Principal Moratorium',during:emiDuringMorat,emi:emiAfterMorat,total:totalMorat,interest:interestMoratTotal,extra:extraMorat,perMonth:perMonthMorat};
+  return {term,holiday,morat,pf,ins,stamp,totalCharges};
+}
+
+function render(){
+  const res=calculateAll();
+  document.getElementById('pfAmount').innerText=formatINR(res.pf);
+  document.getElementById('insAmount').innerText=formatINR(res.ins);
+  document.getElementById('totalCharges').innerText=formatINR(res.totalCharges);
+  const cards=document.getElementById('cards');
+  cards.innerHTML=`
+    <div class='result-card'>
+      <h3>${res.term.scheme}</h3>
+      <div class='result-item'><div class='muted'>EMI</div><div>${formatINR(res.term.emi)}</div></div>
+      <div class='result-item'><div class='muted'>Total Payment</div><div>${formatINR(res.term.total)}</div></div>
+      <div class='result-item'><div class='muted'>Total Interest</div><div>${formatINR(res.term.interest)}</div></div>
+    </div>
+
+    <div class='result-card'>
+      <h3>${res.holiday.scheme}</h3>
+      <div class='result-item'><div class='muted'>EMI During Holiday Period</div><div>${formatINR(res.holiday.during)}</div></div>
+      <div class='result-item'><div class='muted'>EMI</div><div>${formatINR(res.holiday.emi)}</div></div>
+      <div class='result-item'><div class='muted'>Total Payment</div><div>${formatINR(res.holiday.total)}</div></div>
+      <div class='result-item'><div class='muted'>Total Interest</div><div>${formatINR(res.holiday.interest)}</div></div>
+    </div>
+
+    <div class='result-card'>
+      <h3>${res.morat.scheme}</h3>
+      <div class='result-item'><div class='muted'>EMI During Morat</div><div>${formatINR(res.morat.during)}</div></div>
+      <div class='result-item'><div class='muted'>EMI</div><div>${formatINR(res.morat.emi)}</div></div>
+      <div class='result-item'><div class='muted'>Total Payment</div><div>${formatINR(res.morat.total)}</div></div>
+      <div class='result-item'><div class='muted'>Total Interest</div><div>${formatINR(res.morat.interest)}</div></div>
+      <div class='result-item'><div class='muted'>Extra vs Term</div><div>${formatINR(res.morat.extra)}</div></div>
+      <div class='result-item'><div class='muted'>Per Month Extra <span class='info-icon' id='infoMorat'>i</span></div><div>${formatINR(res.morat.perMonth)}</div></div>
+    </div>`;
+
+  const info=document.getElementById('infoMorat');
+  if(info){
+    info.addEventListener('click',e=>{
+      const tip=document.getElementById('tooltip');
+      const rect=info.getBoundingClientRect();
+      tip.style.left=(rect.right+8)+'px';
+      tip.style.top=(rect.top-6)+'px';
+      tip.style.display='block';
+      tip.setAttribute('aria-hidden','false');
+      setTimeout(()=>{
+        const closeFunc=ev=>{
+          if(!tip.contains(ev.target)&&ev.target!==info){
+            tip.style.display='none';
+            tip.setAttribute('aria-hidden','true');
+            document.removeEventListener('click',closeFunc);
+          }
+        };
+        document.addEventListener('click',closeFunc);
+      },50);
+    });
+  }
+}
+
+document.getElementById('calcBtn').addEventListener('click',()=>{
+  render();
+  const btn=document.getElementById('calcBtn');
+  const old=btn.innerText;
+  btn.innerText='Calculated';
+  setTimeout(()=>btn.innerText=old,900);
+});
+</script>
+</body>
+</html>
