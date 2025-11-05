@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Bajaj Loan Calculator (v7.1)</title>
+<title>Bajaj Loan Calculator (v7.6)</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
   :root{
@@ -19,9 +19,12 @@
   h1{text-align:center;color:var(--bajaj-yellow);font-size:22px;margin-bottom:8px;}
   p.lead{text-align:center;color:var(--muted);margin-bottom:20px;}
   label.f{display:block;font-weight:600;color:var(--bajaj-yellow);margin-top:12px;font-size:14px;}
-  input[type=number]{width:100%;padding:12px;margin-top:6px;border-radius:8px;border:1px solid #222;background:#0f1011;color:#fff;font-size:15px;}
+  input[type=number]{width:100%;padding:12px;margin-top:6px;border-radius:8px;border:1px solid #333;background:#0f1011;color:#fff;font-size:15px;}
   button.btn{width:100%;padding:14px;border-radius:8px;border:none;background:var(--bajaj-blue);color:#fff;font-weight:600;font-size:16px;cursor:pointer;margin-top:18px;}
   button.btn:hover{background:var(--bajaj-yellow);color:#000;}
+  .selector-group{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;}
+  .option-btn{padding:6px 10px;border-radius:6px;border:1px solid #333;background:#111214;color:#fff;font-size:13px;text-align:center;cursor:pointer;transition:all 0.2s ease;flex:0 0 auto;}
+  .option-btn.active{background:var(--bajaj-yellow);color:#000;box-shadow:0 0 8px rgba(253,185,19,0.6);}
   .result-cards{display:flex;flex-direction:column;gap:12px;margin-top:18px;}
   .result-card{background:#0b0b0b;border-radius:10px;padding:14px;border:1px solid #161616;}
   .result-card h3{margin:0 0 8px 0;color:var(--bajaj-yellow);font-size:15px;}
@@ -47,26 +50,34 @@
     <input id="loanAmount" type="number" value="1000000"/>
 
     <label class="f">Interest Rate (% p.a.)</label>
-    <input id="interestRate" type="number" step="0.01" value="10"/>
+    <input id="interestRate" type="number" step="0.01" value="11"/>
 
     <label class="f">Tenure (months)</label>
     <input id="tenure" type="number" value="24"/>
 
-    <label class="f">EMI Holiday (months)</label>
-    <input id="emiHoliday" type="number" value="6"/>
+    <label class="f">EMI Holiday</label>
+    <div class="selector-group" id="emiHolidayOptions">
+      <div class="option-btn" data-value="3">3 Months</div>
+      <div class="option-btn" data-value="6">6 Months</div>
+    </div>
 
-    <label class="f">Principal Morat (months)</label>
-    <input id="principalMorat" type="number" value="12"/>
+    <label class="f">Principal Moratorium</label>
+    <div class="selector-group" id="principalMoratOptions">
+      <div class="option-btn" data-value="3">3 Months</div>
+      <div class="option-btn" data-value="6">6 Months</div>
+      <div class="option-btn" data-value="9">9 Months</div>
+      <div class="option-btn" data-value="12">12 Months</div>
+    </div>
 
     <button id="calcBtn" class="btn">Calculate</button>
 
     <div id="pfCard" class="pf-ins-card">
       <div class="label">Processing Fee (including GST)</div>
-      <div id="pfAmount">₹0.00</div>
+      <div id="pfAmount">₹0</div>
     </div>
     <div id="insCard" class="pf-ins-card">
       <div class="label">Insurance</div>
-      <div id="insAmount">₹0.00</div>
+      <div id="insAmount">₹0</div>
     </div>
     <div id="stampCard" class="pf-ins-card">
       <div class="label">Stamp Duty</div>
@@ -74,7 +85,7 @@
     </div>
     <div id="totalCard" class="pf-ins-card">
       <div class="label total-highlight">Total Charges</div>
-      <div id="totalCharges">₹0.00</div>
+      <div id="totalCharges">₹0</div>
     </div>
 
     <div id="cards" class="result-cards"></div>
@@ -92,30 +103,53 @@ function emiFormula(principal, rate, months){
   const f=Math.pow(1+rate,months);
   return principal*rate*f/(f-1);
 }
-function formatINRnum(x){return Number(x).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});}
-function formatINR(x){if(x==='-'||x===undefined||x===null||isNaN(x))return '-';return '₹'+formatINRnum(x);}
+function formatINR(x){
+  if(x==='-'||x===undefined||x===null||isNaN(x))return '-';
+  return '₹'+Math.round(Number(x)).toLocaleString('en-IN');
+}
+
+let emiHoliday = 6;
+let principalMorat = 12;
+
+document.querySelectorAll('#emiHolidayOptions .option-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#emiHolidayOptions .option-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    emiHoliday = parseInt(btn.dataset.value);
+  });
+});
+
+document.querySelectorAll('#principalMoratOptions .option-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#principalMoratOptions .option-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    principalMorat = parseInt(btn.dataset.value);
+  });
+});
 
 function calculateAll(){
   const P=toNum(document.getElementById('loanAmount').value);
   const annualRate=toNum(document.getElementById('interestRate').value);
   const n=Math.max(1,parseInt(document.getElementById('tenure').value||0));
-  const emiHoliday=Math.max(0,parseInt(document.getElementById('emiHoliday').value||0));
-  const principalMorat=Math.max(0,parseInt(document.getElementById('principalMorat').value||0));
   const r=annualRate/12/100;
+
   const pf=P*0.01*1.18;
   const ins=P*0.004*1.18;
   const stamp=toNum(document.getElementById('stampInput').value||0);
   const totalCharges=pf+ins+stamp;
+
   const emiTerm=emiFormula(P,r,n);
   const totalTerm=emiTerm*n;
   const interestTerm=totalTerm-P;
-  const accrued=P*(Math.pow(1+r,emiHoliday)-1);
-  const newP=P+accrued;
+
   const remH=Math.max(1,n-emiHoliday);
-  const emiHolidayAmt=emiFormula(newP,r,remH);
+  const accrued = P * (Math.pow(1 + r, emiHoliday) - 1);
+  const newP = P + accrued;
+  const emiHolidayAmt = emiFormula(newP, r, remH);
   const totalHoliday=emiHolidayAmt*remH;
   const interestHoliday=totalHoliday-P;
   const emiDuringHoliday=0;
+
   const emiDuringMorat=P*r;
   const remM=Math.max(1,n-principalMorat);
   const emiAfterMorat=emiFormula(P,r,remM);
@@ -135,6 +169,7 @@ function render(){
   document.getElementById('pfAmount').innerText=formatINR(res.pf);
   document.getElementById('insAmount').innerText=formatINR(res.ins);
   document.getElementById('totalCharges').innerText=formatINR(res.totalCharges);
+
   const cards=document.getElementById('cards');
   cards.innerHTML=`
     <div class='result-card'>
